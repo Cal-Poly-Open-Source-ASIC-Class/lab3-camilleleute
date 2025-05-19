@@ -114,7 +114,7 @@ DFFRAM256x32 RAM1(
         .A0(A1)
 );
 
-// MUX from RAm0 & RAM1
+// MUX from RAM0 & RAM1
 always_comb begin
     // Defaults
     pA_data_o = 32'b0;

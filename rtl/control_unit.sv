@@ -34,12 +34,6 @@ logic port_priority;
 logic pA_req;
 logic pB_req;
  
-typedef enum logic [0:0] {
-    PORT_A = 1'b0,
-    PORT_B = 1'b1
-} state_t;
-
-state_t PS, NS;
 
 always_comb begin
     pA_req = pA_cyc && pA_stb;
@@ -48,11 +42,9 @@ end
 
 always_ff @(posedge clk or negedge RST) begin
     if (!RST) begin
-        PS <= PORT_A;
         reset <= 1;
         port_priority <= 0;
     end else begin
-        PS <= NS;
         reset <= 0;
         if (pA_req && pB_req && (pA_CS == pB_CS)) begin
             port_priority <= ~port_priority;
@@ -70,7 +62,6 @@ always_comb begin
     EN1  = 0;
     pA_ack = 0;
     pB_ack = 0;
-    NS = PS;
 
     if (pA_req && pB_req) begin
         if (pA_CS != pB_CS) begin // not accessing same RAM, give ports what they want
@@ -84,18 +75,29 @@ always_comb begin
         end else begin // accessing the same RAM
             pA_stall = port_priority;
             pB_stall = ~port_priority;
-            NS = port_priority ? PORT_B : PORT_A;
-        end 
-
+            if (port_priority) begin
+                // port B 
+                if (pB_CS) begin
+                sel1 = 1;
+                EN1 = 1;
+                end else begin
+                    sel0 = 1;
+                    EN0 = 1;
+                end
+                pB_ack = 1;
+            end else begin
+                if (pA_CS) begin
+                        sel1 = 0;
+                        EN1 = 1;
+                    end else begin
+                        sel0 = 0;
+                        EN0 = 1;
+                    end
+                    pA_ack = 1;                
+                end 
+        end
     end else if (pA_req) begin
-        NS = PORT_A;
-    end else if (pB_req) begin
-        NS = PORT_B;
-    end
-
-    case (PS)
-        PORT_A: begin 
-            if (pA_CS) begin
+        if (pA_CS) begin
                 sel1 = 0;
                 EN1 = 1;
             end else begin
@@ -103,9 +105,8 @@ always_comb begin
                 EN0 = 1;
             end
             pA_ack = 1;
-        end
-        PORT_B: begin
-            if (pB_CS) begin
+    end else if (pB_req) begin
+        if (pB_CS) begin
                 sel1 = 1;
                 EN1 = 1;
             end else begin
@@ -113,9 +114,7 @@ always_comb begin
                 EN0 = 1;
             end
             pB_ack = 1;
-        end
-    endcase
-
+    end
 end
 
 endmodule
