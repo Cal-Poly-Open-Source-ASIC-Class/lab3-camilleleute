@@ -121,14 +121,14 @@ always_comb begin
     pB_data_o = 32'b0;
 
     // For Port A
-    if (!pA_addr_i[10]) begin
+    if (!pA_addr_i[10] && (pA_we_i == 0) && pA_ack_o) begin
         pA_data_o = Do0;
     end else begin
         pA_data_o = Do1;
     end
 
     // For Port B
-    if (!pB_addr_i[10]) begin
+    if (!pB_addr_i[10] && (pB_we_i == 0) && pB_ack_o) begin
         pB_data_o = Do0;
     end else begin
         pB_data_o = Do1;
