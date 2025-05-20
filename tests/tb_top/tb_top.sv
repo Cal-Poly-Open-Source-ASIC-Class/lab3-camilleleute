@@ -55,7 +55,7 @@ module tb_top();
     end
 
     initial begin
-        #500; 
+        #700; 
         $display("ERROR: Simulation timeout reached.");
         $finish;
     end
@@ -72,7 +72,7 @@ module tb_top();
         pB_we_i = 0;
         pB_addr_i = 0;
         pB_data_i = 0;
-        repeat(2)@(posedge clk);
+        repeat(2) @(posedge clk);
         rst_n = 1;
         @(posedge clk);
     endtask
@@ -83,15 +83,9 @@ module tb_top();
         pA_we_i = 4'b1111;
         pA_addr_i = addr;
         pA_data_i = data;
-
         @(posedge clk);
-       
-
         pA_stb_i = 0;
         pA_cyc_i = 0;
-        pA_we_i = 0;
-        pA_data_i = '0;
-        @(posedge clk);
     endtask
 
     task write_portB(input [10:0] addr, input [31:0] data);
@@ -100,19 +94,9 @@ module tb_top();
         pB_we_i = 4'b1111;
         pB_addr_i = addr;
         pB_data_i = data;
-        // Wait until not stalled
-        do begin
-            @(posedge clk);
-        end while (pB_stall_o);
-        
-        // Wait for ack
-        while (!pB_ack_o) @(posedge clk);
-
+        @(posedge clk);
         pB_stb_i = 0;
         pB_cyc_i = 0;
-        pB_we_i = 0;
-        pB_data_i = '0;
-
     endtask
 
     task read_portA(input [10:0] addr, output [31:0] data);
@@ -143,13 +127,14 @@ module tb_top();
         do begin
             @(posedge clk);
         end while (pB_stall_o);
+        pB_stb_i = 0;
+        pB_cyc_i = 0;
         
         // Wait for ack
         while (!pB_ack_o) @(posedge clk);
         data = pB_data_o;
 
-        pB_stb_i = 0;
-        pB_cyc_i = 0;
+        
     endtask
 
     task sim_write(
@@ -169,19 +154,7 @@ module tb_top();
         pB_addr_i = addrB;
         pB_data_i = dataB;
 
-        // Wait until not stalled
-        //do @(posedge clk); while (pA_stall_o || pB_stall_o);
-        @(posedge clk)
-
-        // Wait for both ACKs
-        //while (!pA_ack_o || !pB_ack_o) @(posedge clk);
-
-        pA_stb_i = 0;
-        pA_cyc_i = 0;
-        pA_we_i = 0;
-        pB_stb_i = 0;
-        pB_cyc_i = 0;
-        pB_we_i = 0;
+        @(posedge clk);
     endtask
 
 
@@ -202,12 +175,10 @@ module tb_top();
         pA_data_i = '0;
         pB_data_i = '0;
 
-        // Wait until not stalled
-        //do @(posedge clk); while (pA_stall_o || pB_stall_o);
         @(posedge clk)
 
         // Wait for both ACKs
-        //while (!pA_ack_o || !pB_ack_o) @(posedge clk);
+        while (!pA_ack_o || !pB_ack_o) @(posedge clk);
 
         dataA = pA_data_o;
         dataB = pB_data_o;
@@ -240,16 +211,24 @@ module tb_top();
         
         // Wait for a clock cycle and check state
         @(posedge clk);
-        assert(pB_ack_o && pA_stall_o) else 
-            $error("Expected port B to write while port A stalls, got: pB_ack=%b, pA_stall=%b", pB_ack_o, pA_stall_o);
-            
+        assert(!pB_ack_o && pA_stall_o) else 
+            $error("Expected port A stall, got: pA_stall=%b", pA_stall_o);
+        //@(posedge clk); 
         // Port B completes its write
         pB_data_i = '0;   
+        pB_stb_i = 0;
+        pB_cyc_i = 0;
         @(posedge clk);
-        
+        assert(pB_ack_o && !pA_stall_o) else 
+            $error("Expected no port A stall, got: pA_stall=%b & pB_ack_o=%b", pA_stall_o, pB_ack_o);
+
+        pA_data_i = '0;   
+        pA_stb_i = 0;
+        pA_cyc_i = 0;
+        @(posedge clk);
         // Now port A should get access for its write
-        assert(pA_ack_o ) else 
-            $error("Expected port A to write while port B read stalls, got: pA_ack=%b, pB_stall=%b", pA_ack_o, pB_stall_o);
+        assert(pA_ack_o) else 
+            $error("Expected port A ack, got: pA_ack=%b", pA_ack_o);
         
     endtask
 
@@ -325,79 +304,92 @@ module tb_top();
     endtask
 
     initial begin
-        logic [31:0] read_data_A;
+        logic [31:0] read_data_A, read_data_A1;
         logic [31:0] read_data_B;
 
         reset();
 
+        @(posedge clk);
 
-        // test 1: basic write and reads on A
-        $display("\nTest 1: Basic write/read on port A - RAM0");
+
+        // test 1 & 2: basic write and reads on A
+        $display("\nTest 1 & 2: Basic write/read on port A - RAM0");
         write_portA(11'h000, 32'hA5A5A5A5);
-        // read_portA(11'h000, read_data_A);
-        // assert((read_data_A === 32'hA5A5A5A5) && pA_ack_o)
-        //     $display("PASS: Port A read back correct data from RAM0: %h", read_data_A);
-        // else
-        //     $error("FAIL: Port A read incorrect data from RAM0: %h, expected: %h", read_data_A, 32'hA5A5A5A5);
+        write_portA(11'h400, 32'h5A5A5A5A);
+        read_portA(11'h000, read_data_A);
+        read_portA(11'h400, read_data_A1);
 
-        // // Test 2: Basic write and read operations on port A - RAM1
-        // $display("\nTest 2: Basic write/read on port A - RAM1");
-        // write_portA(11'h400, 32'h5A5A5A5A);
-        // read_portA(11'h400, read_data_A);
-        // assert((read_data_A === 32'h5A5A5A5A) && pA_ack_o)
-        //     $display("PASS: Port A read back correct data from RAM1: %h", read_data_A);
-        // else
-        //     $error("FAIL: Port A read incorrect data from RAM1: %h, expected: %h", read_data_A, 32'h5A5A5A5A);
-
-        // // Test 3: Basic write and read operations on port B - RAM0
-        // $display("\nTest 3: Basic write/read on port B - RAM0");
-        // write_portB(11'h000, 32'hBBBBBBBB);
-        // read_portB(11'h000, read_data_B);
-        // assert((read_data_B === 32'hBBBBBBBB) && pB_ack_o)
-        //     $display("PASS: Port B read back correct data from RAM0: %h", read_data_B);
-        // else
-        //     $error("FAIL: Port B read incorrect data from RAM0: %h, expected: %h", read_data_B, 32'hBBBBBBBB);
+        assert((read_data_A === 32'hA5A5A5A5) && pA_ack_o)
+            $display("PASS: Port A read back correct data from RAM0: %h", read_data_A);
+        else
+            $error("FAIL: Port A read incorrect data from RAM0: %h, expected: %h", read_data_A, 32'hA5A5A5A5);
+        assert((read_data_A1 === 32'h5A5A5A5A) && pA_ack_o)
+            $display("PASS: Port A read back correct data from RAM1: %h", read_data_A1);
+        else
+            $error("FAIL: Port A read incorrect data from RAM1: %h, expected: %h", read_data_A1, 32'h5A5A5A5A);
         
-        // // Test 4: Basic write and read operations on port B - RAM1
-        // $display("\nTest 4: Basic write/read on port B - RAM1");
-        // write_portB(11'h404, 32'hCCCCCCCC);
-        // read_portB(11'h404, read_data_B);
-        // assert((read_data_B === 32'hCCCCCCCC) && pB_ack_o)
-        //     $display("PASS: Port B read back correct data from RAM1: %h", read_data_B);
-        // else
-        //     $error("FAIL: Port B read incorrect data from RAM1: %h, expected: %h", read_data_B, 32'hCCCCCCCC);
-
-
-
-        // // Test 5: Simultaneous write & read to different RAMs
-        // $display("\nTest 5: Simultaneous write to different RAMs");
-        // sim_write(11'h008, 32'hDEADBEEF, 11'h408, 32'hCAFEBABE);
         
-        // sim_read(11'h008, 11'h408, read_data_A, read_data_B);
+        @(posedge clk);
+
+
+        // Test 3: Basic write and read operations on port B - RAM0
+        $display("\nTest 3: Basic write/read on port B - RAM0");
+        write_portB(11'h000, 32'hBBBBBBBB);
+        read_portB(11'h000, read_data_B);
+        assert((read_data_B === 32'hBBBBBBBB) && pB_ack_o)
+            $display("PASS: Port B read back correct data from RAM0: %h", read_data_B);
+        else
+            $error("FAIL: Port B read incorrect data from RAM0: %h, expected: %h", read_data_B, 32'hBBBBBBBB);
+
+        @(posedge clk);
+        @(posedge clk);
+
+        // Test 4: Basic write and read operations on port B - RAM1
+        $display("\nTest 4: Basic write/read on port B - RAM1");
+        write_portB(11'h404, 32'hCCCCCCCC);
+        read_portB(11'h404, read_data_B);
+        assert((read_data_B === 32'hCCCCCCCC) && pB_ack_o)
+            $display("PASS: Port B read back correct data from RAM1: %h", read_data_B);
+        else
+            $error("FAIL: Port B read incorrect data from RAM1: %h, expected: %h", read_data_B, 32'hCCCCCCCC);
+
+        @(posedge clk);
+        @(posedge clk);
+
+        // Test 5: Simultaneous write & read to different RAMs
+        $display("\nTest 5: Simultaneous write to different RAMs");
+        sim_write(11'h008, 32'hDEADBEEF, 11'h408, 32'hCAFEBABE);
         
-        // assert(read_data_A === 32'hDEADBEEF)
-        //     $display("PASS: Port A wrote correct data to RAM0: %h", read_data_A);
-        // else
-        //     $error("FAIL: Port A wrote incorrect data to RAM0: %h, expected: %h", read_data_A, 32'hDEADBEEF);
+        sim_read(11'h008, 11'h408, read_data_A, read_data_B);
+        
+        assert(read_data_A === 32'hDEADBEEF)
+            $display("PASS: Port A wrote correct data to RAM0: %h", read_data_A);
+        else
+            $error("FAIL: Port A wrote incorrect data to RAM0: %h, expected: %h", read_data_A, 32'hDEADBEEF);
             
-        // assert(read_data_B === 32'hCAFEBABE)
-        //     $display("PASS: Port B wrote correct data to RAM1: %h", read_data_B);
-        // else
-        //     $error("FAIL: Port B wrote incorrect data to RAM1: %h, expected: %h", read_data_B, 32'hCAFEBABE);
+        assert(read_data_B === 32'hCAFEBABE)
+            $display("PASS: Port B wrote correct data to RAM1: %h", read_data_B);
+        else
+            $error("FAIL: Port B wrote incorrect data to RAM1: %h, expected: %h", read_data_B, 32'hCAFEBABE);
 
-        // // Test 6: write from one port, read fomr the other
-        // $display("\nTest 6: write from one port, read fomr the other");
-        // write_portA(11'h00c, 32'h67676767);
-        // read_portB(11'h404, read_data_B);
-        // assert(read_data_B === 32'hCCCCCCCC)
-        //     $display("PASS: Port A wrote correct data to RAM0 & Port B read correctly: %h", read_data_B);
-        // else
-        //     $error("FAIL: Port A wrote incorrect data to RAM0: %h, expected: %h", read_data_B,32'hCCCCCCCC);
+        @(posedge clk);
+        @(posedge clk);
 
+        // Test 6: write from one port, read fomr the other
+        $display("\nTest 6: write from one port, read fomr the other");
+        write_portA(11'h00c, 32'h67676767);
+        read_portB(11'h00c, read_data_B);
+        assert(read_data_B === 32'h67676767)
+            $display("PASS: Port A wrote correct data to RAM0 & Port B read correctly: %h", read_data_B);
+        else
+            $error("FAIL: Port A wrote incorrect data to RAM0: %h, expected: %h", read_data_B,32'h67676767);
 
-        // // Test 7: Simultaneous write and read to RAM0
-        // $display("\nTest 7: Simultaneous write and read to RAM0");
-        // same_ram_write(11'h010, 32'h12345678, 11'h014, 32'h87654321);
+       @(posedge clk);
+        @(posedge clk); 
+
+        // Test 7: Simultaneous write and read to RAM0
+        $display("\nTest 7: Simultaneous write and read to RAM0");
+        same_ram_write(11'h010, 32'h12345678, 11'h014, 32'h87654321);
         // same_ram_read(11'h010, 11'h014, read_data_A, read_data_B);
             
         //     assert(read_data_B ===  32'h87654321)
@@ -409,7 +401,9 @@ module tb_top();
         //         $display("PASS: Port A wrote correct data to RAM0: %h", read_data_A);
         //     else
         //         $error("FAIL: Port A wrote incorrect data to RAM0: %h, expected: %h", read_data_A, 32'h12345678);
-                
+
+        @(posedge clk);
+        @(posedge clk); 
 
 
         
