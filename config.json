@@ -15,11 +15,11 @@
       "DFFRAM256x32": {
           "instances": {
           "RAM0": {
-              "location": ["100", "100"],
+              "location": ["200", "200"],
               "orientation": "N"
           },
           "RAM1": {
-              "location": [100, 750],
+              "location": [200, 900],
               "orientation": "N"
           }
         },

@@ -1,5 +1,3 @@
-//`timescale 1ns / 1ps
-
 module top (
     input logic clk,
     input logic RST_N,
@@ -30,7 +28,7 @@ module top (
 logic [3:0] WE0, WE1;
 logic [31:0] Di0, Di1;
 logic [31:0] Do0, Do1;
-logic [10:0] A0, A1;
+logic [7:0] A0, A1;  // Changed from [10:0] to [7:0] to match DFFRAM interface
 logic sel_0, sel_1;
 logic EN_0, EN_1;
 logic reset;
@@ -50,12 +48,12 @@ always_comb begin
         // port A to RAM0
         WE0 = pA_we_i;
         Di0 = pA_data_i;
-        A0 = pA_addr_i;
+        A0 = pA_addr_i[9:2];  
     end else begin
         // port B to RAM0
         WE0 = pB_we_i;
         Di0 = pB_data_i;
-        A0 = pB_addr_i;
+        A0 = pB_addr_i[9:2]; 
     end
 end
 
@@ -65,12 +63,12 @@ always_comb begin
         // port A to RAM1
         WE1 = pA_we_i;
         Di1 = pA_data_i;
-        A1 = pA_addr_i;
+        A1 = pA_addr_i[9:2];  // Now properly connected to match DFFRAM A_WIDTH
     end else begin
         // port B to RAM1
         WE1 = pB_we_i;
         Di1 = pB_data_i;
-        A1 = pB_addr_i;
+        A1 = pB_addr_i[9:2];  // Now properly connected to match DFFRAM A_WIDTH
     end
 end
 
@@ -105,13 +103,14 @@ control_unit controller(
     .reset(reset)
 );
 
+// Explicitly instantiate DFFRAM256x32 with proper port connections
 DFFRAM256x32 RAM0(
     .CLK(clk),
     .WE0(WE0),
     .EN0(EN_0),
     .Di0(Di0),
     .Do0(Do0),
-    .A0(A0[9:2])
+    .A0(A0)
 );
 
 DFFRAM256x32 RAM1(
@@ -120,7 +119,7 @@ DFFRAM256x32 RAM1(
     .EN0(EN_1),
     .Di0(Di1),
     .Do0(Do1),
-    .A0(A1[9:2])
+    .A0(A1)  
 );
 
 // MUX from RAM0 & RAM1
@@ -177,7 +176,6 @@ always_ff @(posedge clk or negedge RST_N) begin
         pB_prev_data_i <= pB_data_reg;
         pA_prev_we <= pA_we_reg;
         pB_prev_we <= pB_we_reg;
-        
     end
 end
 

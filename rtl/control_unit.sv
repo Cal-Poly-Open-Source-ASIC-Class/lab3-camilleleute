@@ -38,13 +38,14 @@ logic pA_req, pB_req;
 logic pA_next_ACK, pB_next_ACK;
 
 // Define the state encoding
-localparam IDLE = 2'b00;
-localparam PORT_A = 2'b01;
-localparam PORT_B = 2'b10;
-localparam PORT_A_B = 2'b11;
+localparam IDLE = 3'b000;
+localparam PORT_A = 3'b001;
+localparam PORT_B = 3'b010;
+localparam PORT_A_B = 3'b011;
+localparam RESET = 3'b100;
 
 // State variables
-logic [1:0] PS, NS;
+logic [2:0] PS, NS;
 
 always_comb begin
     pA_req = pA_cyc && pA_stb;
@@ -55,7 +56,7 @@ logic pA_int_CS, pB_int_CS;
 
 always_ff @(posedge clk or negedge RST) begin
     if (!RST) begin
-        PS <= IDLE;
+        PS <= RESET;
         reset <= 1;
         port_priority <= 0;
         pA_past_CS <= 0;
@@ -85,6 +86,18 @@ always_comb begin
     NS = PS;
 
     case (PS) 
+        RESET: begin
+            // set all signals to 0
+            sel0 = 0;
+            sel1 = 0;
+            pA_stall = 0;
+            pB_stall = 0;
+            EN0 = 0;
+            EN1 = 0;
+            pA_ack = 0;
+            pB_ack = 0;
+            NS = IDLE;
+        end
         IDLE: begin
             // State computation logic
             if (pA_req && pB_req) begin
